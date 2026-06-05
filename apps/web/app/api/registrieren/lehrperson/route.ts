@@ -1,7 +1,6 @@
 import { pool } from '@/lib/db'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createHmac } from 'crypto'
 
 const schema = z.object({
   vorname:    z.string().min(1),
@@ -9,7 +8,7 @@ const schema = z.object({
   email:      z.string().email(),
   passwort:   z.string().min(8),
   fachbereich: z.enum(['Berufskunde', 'Sport', 'Allgemeinbildung', 'Berufsmatura', 'Englisch', 'Mathematik']),
-  beruf_id:   z.string().uuid().optional(),
+  beruf_id:   z.string().uuid().optional().or(z.literal('')),
 })
 
 export async function POST(req: Request) {
@@ -35,15 +34,11 @@ export async function POST(req: Request) {
   const { rows: schulen } = await pool.query('SELECT id FROM schule LIMIT 1')
   if (!schulen[0]) return NextResponse.json({ fehler: 'Keine Schule konfiguriert' }, { status: 400 })
 
-  const passwortHash = createHmac('sha256', process.env.AUTH_SECRET ?? '')
-    .update(d.passwort)
-    .digest('hex')
-
   try {
     await pool.query(
       `INSERT INTO lehrperson (schule_id, vorname, nachname, email, fachbereich, beruf_id, passwort_hash, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')`,
-      [schulen[0].id, d.vorname, d.nachname, d.email, d.fachbereich, d.beruf_id ?? null, passwortHash]
+       VALUES ($1, $2, $3, $4, $5, $6, crypt($7, gen_salt('bf')), 'pending')`,
+      [schulen[0].id, d.vorname, d.nachname, d.email, d.fachbereich, d.beruf_id || null, d.passwort]
     )
   } catch {
     return NextResponse.json({ fehler: 'Diese E-Mail-Adresse ist bereits registriert.' }, { status: 409 })
