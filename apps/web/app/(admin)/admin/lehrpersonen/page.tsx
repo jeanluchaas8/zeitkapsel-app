@@ -1,8 +1,13 @@
 import Link from 'next/link'
 import { pool } from '@/lib/db'
+import { auth } from '@/auth'
 import { StatusFormular } from './StatusFormular'
+import { LoeschenButton } from './LoeschenButton'
 
 export default async function LehrpersonenSeite() {
+  const session = await auth()
+  const eigeneId = (session?.user as { id?: string })?.id ?? ''
+
   const { rows } = await pool.query(`
     SELECT lp.id, lp.vorname, lp.nachname, lp.email, lp.fachbereich, lp.ist_admin, lp.status,
            b.bezeichnung AS beruf_bezeichnung,
@@ -79,6 +84,7 @@ export default async function LehrpersonenSeite() {
                 <th className="px-4 py-3 text-left font-medium text-stone-600">Beruf</th>
                 <th className="px-4 py-3 text-left font-medium text-stone-600">Klassen</th>
                 <th className="px-4 py-3 text-left font-medium text-stone-600">Rolle</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -94,10 +100,15 @@ export default async function LehrpersonenSeite() {
                       ? <span className="rounded-full bg-purple-100 text-purple-700 px-2 py-0.5 text-xs">Admin</span>
                       : <span className="rounded-full bg-stone-100 text-stone-600 px-2 py-0.5 text-xs">Lehrperson</span>}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    {(lp.id as string) !== eigeneId && (
+                      <LoeschenButton id={lp.id as string} name={`${lp.vorname as string} ${lp.nachname as string}`} />
+                    )}
+                  </td>
                 </tr>
               ))}
               {aktive.length === 0 && (
-                <tr><td colSpan={6} className="py-8 text-center text-stone-400 text-sm">Keine aktiven Lehrpersonen.</td></tr>
+                <tr><td colSpan={7} className="py-8 text-center text-stone-400 text-sm">Keine aktiven Lehrpersonen.</td></tr>
               )}
             </tbody>
           </table>
@@ -118,6 +129,9 @@ export default async function LehrpersonenSeite() {
                   <td className="px-4 py-3">{lp.email as string}</td>
                   <td className="px-4 py-3">
                     <StatusFormular lehrpersonId={lp.id as string} nurBestaetigen />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <LoeschenButton id={lp.id as string} name={`${lp.vorname as string} ${lp.nachname as string}`} />
                   </td>
                 </tr>
               ))}
