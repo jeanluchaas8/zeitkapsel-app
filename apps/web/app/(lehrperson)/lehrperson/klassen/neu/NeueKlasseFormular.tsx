@@ -12,32 +12,92 @@ interface VerfuegbareKlasse {
   lehrabschluss: string
 }
 
-interface Props {
-  schuljahresenden: Array<{ datum: string; schuljahr: string }>
-  verfuegbareKlassen: VerfuegbareKlasse[]
+interface Schulkalendereintrag {
+  schuljahr: string   // z.B. '2025/26'
+  bezeichnung: string // 'Schuljahresbeginn' | 'Sommerferien'
+  beginn: string      // 'YYYY-MM-DD'
 }
 
-export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Props) {
+interface Props {
+  verfuegbareKlassen: VerfuegbareKlasse[]
+  schulkalender: Schulkalendereintrag[]
+}
+
+// Lehrjahr aus Klassenbezeichnung erkennen
+function erkenneLehrjahr(bezeichnung: string): number {
+  const numMatch = bezeichnung.match(/[A-Z]+_?([1-4])[a-z]?$|[A-Z]+([1-4])[a-z]/)
+  if (numMatch) return parseInt(numMatch[1] || numMatch[2])
+  const yearMatch = bezeichnung.match(/_(\d{2})$/)
+  if (yearMatch) return Math.max(1, Math.min(4, 2026 - (2000 + parseInt(yearMatch[1]))))
+  return 1
+}
+
+// Lehrdauer aus Berufsnamen ableiten
+function lehrdauerFuerBeruf(beruf: string): number {
+  if (/EBA|Assistent|Praktiker|Angestellte/.test(beruf)) return 2
+  if (/4.*Jahr|Informatiker|Elektroniker|Automatiker|Konstrukteur|Schreiner|Zahntechn|Polymechan|Sanitär|Elektroinstall|Zeichner|Automobil-Mechatr/.test(beruf)) return 4
+  return 3
+}
+
+export function NeueKlasseFormular({ verfuegbareKlassen, schulkalender }: Props) {
   const router = useRouter()
-  const [form, setForm] = useState({ bezeichnung: '', beruf: '', lehrstart: '', lehrabschluss: '', lehrdauer: '3' })
+  const [form, setForm] = useState({ bezeichnung: '', beruf: '', lehrstart: '', lehrabschluss: '' })
   const [laden, setLaden] = useState(false)
   const [fehler, setFehler] = useState('')
   const [gewaehlteKlasseId, setGewaehlteKlasseId] = useState<string | null>(null)
 
-  // Autocomplete-State
   const [bezeichnungFokus, setBezeichnungFokus] = useState(false)
   const [berufFokus, setBerufFokus] = useState(false)
   const bezeichnungRef = useRef<HTMLDivElement>(null)
   const berufRef = useRef<HTMLDivElement>(null)
 
-  // Vorschläge nach Bezeichnung
+  // Schulkalender indizieren
+  const sjBeginn = useMemo(() => {
+    const m: Record<string, string> = {}
+    schulkalender.filter(e => e.bezeichnung === 'Schuljahresbeginn').forEach(e => { m[e.schuljahr] = e.beginn })
+    return m
+  }, [schulkalender])
+
+  const sommerferien = useMemo(() => {
+    const m: Record<string, string> = {}
+    schulkalender.filter(e => e.bezeichnung === 'Sommerferien').forEach(e => { m[e.schuljahr] = e.beginn })
+    return m
+  }, [schulkalender])
+
+  // Schuljahr-String aus Startjahr berechnen (z.B. 2025 → '2025/26')
+  function sjString(startJahr: number): string {
+    return `${startJahr}/${String(startJahr + 1).slice(-2)}`
+  }
+
+  // Daten aus Lehrjahr + Beruf berechnen
+  function berechneDaten(bezeichnung: string, beruf: string): { lehrstart: string; lehrabschluss: string } {
+    const lj = erkenneLehrjahr(bezeichnung)
+    const dauer = lehrdauerFuerBeruf(beruf)
+    const aktuellesSJJahr = 2025 // SJ 2025/26
+    const startJahr = aktuellesSJJahr - (lj - 1)
+    const graduierungsJahr = startJahr + dauer // z.B. 2025+4=2029 → SJ 2028/29
+    const graduierungsSJ = sjString(graduierungsJahr - 1) // '2028/29'
+
+    const lehrstart = sjBeginn[sjString(startJahr)] ?? `${startJahr}-08-18`
+    const sommerBeginn = sommerferien[graduierungsSJ]
+    let lehrabschluss = ''
+    if (sommerBeginn) {
+      const d = new Date(sommerBeginn)
+      d.setDate(d.getDate() - 28)
+      lehrabschluss = d.toISOString().slice(0, 10)
+    } else {
+      lehrabschluss = `${graduierungsJahr}-06-15`
+    }
+    return { lehrstart, lehrabschluss }
+  }
+
+  // Autocomplete-Vorschläge
   const bezeichnungVorschlaege = useMemo(() => {
     if (!form.bezeichnung.trim()) return []
     const q = form.bezeichnung.toLowerCase()
     return verfuegbareKlassen.filter(k => k.bezeichnung.toLowerCase().includes(q)).slice(0, 8)
   }, [form.bezeichnung, verfuegbareKlassen])
 
-  // Vorschläge nach Beruf
   const berufVorschlaege = useMemo(() => {
     if (!form.beruf.trim()) return []
     const q = form.beruf.toLowerCase()
@@ -54,80 +114,46 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  function aendern(feld: string, wert: string) {
-    // Manuelle Änderung → nicht mehr an importierte Klasse gebunden
-    setGewaehlteKlasseId(null)
-    const neuesForm = { ...form, [feld]: wert }
-    if ((feld === 'lehrstart' || feld === 'lehrdauer') && neuesForm.lehrstart && neuesForm.lehrdauer) {
-      const start = new Date(neuesForm.lehrstart)
-      const jahre = parseInt(neuesForm.lehrdauer)
-      if (!isNaN(start.getTime()) && jahre >= 2 && jahre <= 4) {
-        const ziel = new Date(start)
-        ziel.setFullYear(ziel.getFullYear() + jahre)
-        const kandidaten = schuljahresenden
-          .map(s => ({ ...s, d: new Date(s.datum) }))
-          .filter(s => { const diff = (s.d.getTime() - ziel.getTime()) / (30.44 * 86400000); return diff >= -6 && diff <= 14 })
-          .sort((a, b) => Math.abs(a.d.getTime() - ziel.getTime()) - Math.abs(b.d.getTime() - ziel.getTime()))
-        if (kandidaten[0]) neuesForm.lehrabschluss = kandidaten[0].datum
-      }
-    }
-    setForm(neuesForm)
-  }
-
-  // Importierte Klasse auswählen → nur Felder befüllen
+  // Klasse aus Vorschlag wählen → Felder befüllen
   function klasseWaehlen(k: VerfuegbareKlasse) {
     setBezeichnungFokus(false)
     setBerufFokus(false)
-    const start = new Date(k.lehrstart)
-    const end = new Date(k.lehrabschluss)
-    const lehrdauer = String(end.getFullYear() - start.getFullYear())
-    setForm({
-      bezeichnung: k.bezeichnung,
-      beruf: k.beruf,
-      lehrstart: k.lehrstart,
-      lehrabschluss: k.lehrabschluss,
-      lehrdauer,
-    })
+    const daten = berechneDaten(k.bezeichnung, k.beruf)
+    setForm({ bezeichnung: k.bezeichnung, beruf: k.beruf, ...daten })
     setGewaehlteKlasseId(k.id)
   }
 
-  const vorschlaege = schuljahresenden
-    .map(s => ({ ...s, d: new Date(s.datum) }))
-    .filter(s => form.lehrstart && s.d > new Date(form.lehrstart))
-    .slice(0, 4)
+  function aendern(feld: string, wert: string) {
+    setGewaehlteKlasseId(null)
+    const neuesForm = { ...form, [feld]: wert }
+    // Wenn Bezeichnung oder Beruf geändert und beides vorhanden → Daten neu berechnen
+    if ((feld === 'bezeichnung' || feld === 'beruf') && neuesForm.bezeichnung && neuesForm.beruf) {
+      const daten = berechneDaten(neuesForm.bezeichnung, neuesForm.beruf)
+      neuesForm.lehrstart = daten.lehrstart
+      neuesForm.lehrabschluss = daten.lehrabschluss
+    }
+    setForm(neuesForm)
+  }
 
   async function absenden(e: React.FormEvent) {
     e.preventDefault()
     setLaden(true)
     setFehler('')
     try {
-      // Importierte Klasse: nur Zuweisung, keine neue Klasse anlegen
       if (gewaehlteKlasseId) {
         const res = await fetch('/api/lehrperson/klassen/beitreten', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ klasse_id: gewaehlteKlasseId }),
         })
-        if (!res.ok) {
-          const d = await res.json() as { fehler?: string }
-          throw new Error(d.fehler ?? 'Fehler')
-        }
+        if (!res.ok) throw new Error(((await res.json()) as { fehler?: string }).fehler ?? 'Fehler')
       } else {
-        // Manuelle Erfassung: neue Klasse erstellen
         const res = await fetch('/api/admin/klassen', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bezeichnung: form.bezeichnung,
-            beruf: form.beruf,
-            lehrstart: form.lehrstart,
-            lehrabschluss: form.lehrabschluss,
-          }),
+          body: JSON.stringify(form),
         })
-        if (!res.ok) {
-          const d = await res.json() as { fehler?: string }
-          throw new Error(d.fehler ?? 'Fehler')
-        }
+        if (!res.ok) throw new Error(((await res.json()) as { fehler?: string }).fehler ?? 'Fehler')
       }
       router.push('/lehrperson/dashboard')
       router.refresh()
@@ -156,11 +182,8 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
           <ul className="absolute z-20 mt-1 w-full rounded-xl border border-stone-200 bg-white shadow-lg overflow-hidden">
             {bezeichnungVorschlaege.map(k => (
               <li key={k.id}>
-                <button
-                  type="button"
-                  onMouseDown={() => klasseWaehlen(k)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 flex items-center justify-between gap-3"
-                >
+                <button type="button" onMouseDown={() => klasseWaehlen(k)}
+                  className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 flex items-center justify-between gap-3">
                   <span className="font-mono font-medium text-sm">{k.bezeichnung}</span>
                   <span className="text-xs text-stone-400 truncate">{k.beruf}</span>
                 </button>
@@ -175,7 +198,7 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
         <label className="label">Beruf</label>
         <input
           className="input"
-          placeholder="z.B. Informatiker/in EFZ"
+          placeholder="z.B. Informatiker/in Applikationsentwicklung EFZ"
           required
           autoComplete="off"
           value={form.beruf}
@@ -186,11 +209,8 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
           <ul className="absolute z-20 mt-1 w-full rounded-xl border border-stone-200 bg-white shadow-lg overflow-hidden">
             {berufVorschlaege.map(k => (
               <li key={k.id}>
-                <button
-                  type="button"
-                  onMouseDown={() => klasseWaehlen(k)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 flex items-center justify-between gap-3"
-                >
+                <button type="button" onMouseDown={() => klasseWaehlen(k)}
+                  className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 flex items-center justify-between gap-3">
                   <span className="text-sm truncate">{k.beruf}</span>
                   <span className="font-mono text-xs text-stone-400 shrink-0">{k.bezeichnung}</span>
                 </button>
@@ -200,49 +220,29 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
         )}
       </div>
 
+      {/* Lehrstart & Lehrabschluss (auto-befüllt, aber anpassbar) */}
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Lehrstart</label>
           <input type="date" className="input" required
-            value={form.lehrstart} onChange={e => aendern('lehrstart', e.target.value)} />
+            value={form.lehrstart}
+            onChange={e => { setGewaehlteKlasseId(null); setForm(f => ({ ...f, lehrstart: e.target.value })) }} />
         </div>
         <div>
-          <label className="label">Lehrdauer</label>
-          <select className="input" value={form.lehrdauer} onChange={e => aendern('lehrdauer', e.target.value)}>
-            <option value="2">2 Jahre</option>
-            <option value="3">3 Jahre</option>
-            <option value="4">4 Jahre</option>
-          </select>
+          <label className="label">Lehrabschluss</label>
+          <input type="date" className="input" required
+            value={form.lehrabschluss}
+            onChange={e => { setGewaehlteKlasseId(null); setForm(f => ({ ...f, lehrabschluss: e.target.value })) }} />
         </div>
       </div>
 
-      <div>
-        <label className="label">Lehrabschluss</label>
-        <input type="date" className="input" required
-          value={form.lehrabschluss} onChange={e => aendern('lehrabschluss', e.target.value)} />
-        {vorschlaege.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {vorschlaege.map(v => (
-              <button key={v.datum} type="button"
-                onClick={() => aendern('lehrabschluss', v.datum)}
-                className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                  form.lehrabschluss === v.datum
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-stone-100 text-stone-600 hover:bg-indigo-100 hover:text-indigo-700'
-                }`}>
-                {new Date(v.datum).toLocaleDateString('de-CH', { day: 'numeric', month: 'long', year: 'numeric' })}
-                <span className="ml-1 opacity-70">{v.schuljahr}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
+      {/* Hinweis bei importierter Klasse */}
       {gewaehlteKlasseId && (
         <div className="rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
-          Importierte Klasse ausgewählt – klicke auf „Klasse erfassen" um sie zu übernehmen.
+          Klasse aus Schulnetz ausgewählt – Daten automatisch vorerfasst. Klicke auf „Klasse erfassen".
         </div>
       )}
+
       {fehler && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{fehler}</div>}
 
       <div className="flex justify-between pt-2">
