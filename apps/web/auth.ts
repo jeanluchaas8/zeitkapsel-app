@@ -2,7 +2,6 @@ import NextAuth from 'next-auth'
 import Resend from 'next-auth/providers/resend'
 import Credentials from 'next-auth/providers/credentials'
 import { pool } from './lib/db'
-import { createHmac, timingSafeEqual } from 'crypto'
 import type { Rolle } from './lib/typen'
 import { authConfig } from './auth.config'
 import { zeitkapselAdapter } from './lib/auth-adapter'
@@ -82,15 +81,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return null
           }
 
-          const hash = createHmac('sha256', process.env.AUTH_SECRET ?? '')
-            .update(credentials.passwort as string)
-            .digest('hex')
-
-          if (hash.trim() !== lp.passwort_hash.trim()) {
+          // Passwort via pgcrypto bcrypt prüfen
+          const { rows: check } = await pool.query(
+            'SELECT (passwort_hash = crypt($1, passwort_hash)) AS ok FROM lehrperson WHERE email = $2',
+            [credentials.passwort, credentials.email]
+          )
+          const passwortKorrekt = (check[0] as { ok: boolean })?.ok
+          if (!passwortKorrekt) {
             console.log('[AUTH] Passwort falsch')
+            return null
           }
-
-          if (hash.trim() !== lp.passwort_hash.trim()) return null
 
           return {
             id: lp.id,
