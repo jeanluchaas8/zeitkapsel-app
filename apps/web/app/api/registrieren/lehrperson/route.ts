@@ -45,37 +45,35 @@ export async function POST(req: Request) {
   }
 
   // Admin-Benachrichtigung senden
-  try {
-    const { rows: admins } = await pool.query(
-      'SELECT email, vorname FROM lehrperson WHERE ist_admin = TRUE AND status = $1',
-      ['aktiv']
-    )
-    if (admins.length > 0) {
-      const { Resend } = await import('resend')
-      const resend = new Resend(process.env.RESEND_API_KEY)
-      const baseUrl = process.env.AUTH_URL ?? 'http://localhost:3000'
+  const { rows: admins } = await pool.query(
+    'SELECT email, vorname FROM lehrperson WHERE ist_admin = TRUE AND status = $1',
+    ['aktiv']
+  )
+  console.log('[REGISTRIERUNG] Admins gefunden:', admins.length)
+  if (admins.length > 0) {
+    const { Resend } = await import('resend')
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    const baseUrl = (process.env.AUTH_URL ?? '').replace(/\/$/, '')
 
-      for (const admin of admins as Array<{ email: string; vorname: string }>) {
-        await resend.emails.send({
-          from: process.env.EMAIL_FROM ?? 'noreply@zeitkapsel.ch',
-          to: admin.email,
-          subject: 'Neue Lehrperson wartet auf Bestätigung',
-          html: `
-            <p>Hallo ${admin.vorname}</p>
-            <p><strong>${d.vorname} ${d.nachname}</strong> (${d.email}) hat sich als Lehrperson registriert und wartet auf Bestätigung.</p>
-            <p>Fachbereich: ${d.fachbereich}${berufBezeichnung ? ` · Beruf: ${berufBezeichnung}` : ''}</p>
-            <p>
-              <a href="${baseUrl}/admin/lehrpersonen"
-                 style="display:inline-block;background:#1c1917;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:500">
-                Jetzt bestätigen
-              </a>
-            </p>
-          `,
-        })
-      }
+    for (const admin of admins as Array<{ email: string; vorname: string }>) {
+      const result = await resend.emails.send({
+        from: process.env.EMAIL_FROM ?? 'noreply@zeitkapsel.ch',
+        to: admin.email,
+        subject: 'Neue Lehrperson wartet auf Bestätigung',
+        html: `
+          <p>Hallo ${admin.vorname}</p>
+          <p><strong>${d.vorname} ${d.nachname}</strong> (${d.email}) hat sich als Lehrperson registriert und wartet auf Bestätigung.</p>
+          <p>Fachbereich: ${d.fachbereich}${berufBezeichnung ? ` · Beruf: ${berufBezeichnung}` : ''}</p>
+          <p>
+            <a href="${baseUrl}/admin/lehrpersonen"
+               style="display:inline-block;background:#1c1917;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:500">
+              Jetzt bestätigen
+            </a>
+          </p>
+        `,
+      })
+      console.log('[REGISTRIERUNG] Admin-Mail Ergebnis:', JSON.stringify(result))
     }
-  } catch (err) {
-    console.error('[REGISTRIERUNG] Admin-Mail Fehler:', err)
   }
 
   return NextResponse.json({ ok: true }, { status: 201 })

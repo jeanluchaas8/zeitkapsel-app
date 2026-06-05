@@ -78,8 +78,8 @@ export default function LehrpersonRegistrierenSeite() {
           <div className="text-4xl">✅</div>
           <h1 className="text-xl font-semibold">Registrierung eingereicht</h1>
           <p className="text-stone-500 text-sm">
-            Deine Registrierung wurde eingereicht. Die Schulleitung wird dein Konto in Kürze bestätigen —
-            du erhältst eine E-Mail sobald du dich anmelden kannst.
+            Deine Registrierung wurde eingereicht und wird geprüft.
+            Du erhältst eine E-Mail, sobald dein Konto freigeschaltet wurde.
           </p>
           <Link href="/anmelden?modus=lehrperson" className="block text-sm text-stone-500 underline hover:text-stone-900">
             Zurück zur Anmeldung
