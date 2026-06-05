@@ -13,10 +13,15 @@ export default async function KlassenSeite() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/admin" className="text-stone-400 hover:text-stone-900 text-sm">← Admin</Link>
-        <h1 className="text-2xl font-bold mt-1">Klassen & Zuweisung</h1>
-        <p className="text-sm text-stone-500 mt-1">Lehrpersonen den Klassen zuordnen. Klassen werden von Lehrpersonen erstellt.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link href="/admin" className="text-stone-400 hover:text-stone-900 text-sm">← Admin</Link>
+          <h1 className="text-2xl font-bold mt-1">Klassen & Zuweisung</h1>
+          <p className="text-sm text-stone-500 mt-1">Lehrpersonen den Klassen zuordnen. Klassen werden von Lehrpersonen erstellt.</p>
+        </div>
+        <Link href="/admin/klassen/import" className="btn-primary whitespace-nowrap">
+          Klassen importieren
+        </Link>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
