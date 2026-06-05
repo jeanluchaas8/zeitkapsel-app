@@ -1,0 +1,1 @@
+ALTER TABLE lernende ADD COLUMN IF NOT EXISTS ausgetreten_am TIMESTAMPTZ;
