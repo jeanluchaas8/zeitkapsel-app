@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { LEHRPERSONEN_PDF, type LpDaten } from '../import/lehrpersonendaten'
 
 const FACHBEREICHE = ['Berufskunde', 'Sport', 'Allgemeinbildung', 'Berufsmatura', 'Englisch', 'Mathematik']
 
@@ -16,6 +17,9 @@ export default function NeueLehrpersonSeite() {
   const [berufe, setBerufe] = useState<Beruf[]>([])
   const [laden, setLaden] = useState(false)
   const [fehler, setFehler] = useState('')
+  const [vorschlaege, setVorschlaege] = useState<LpDaten[]>([])
+  const [zeigeVorschlaege, setZeigeVorschlaege] = useState(false)
+  const autocompleteRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -25,6 +29,16 @@ export default function NeueLehrpersonSeite() {
       .catch(() => null)
   }, [])
 
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node)) {
+        setZeigeVorschlaege(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   function aendern(feld: string, wert: string | boolean) {
     setForm((f) => {
       const neu = { ...f, [feld]: wert }
@@ -32,6 +46,32 @@ export default function NeueLehrpersonSeite() {
       if (feld === 'fachbereich') neu.beruf_id = ''
       return neu
     })
+  }
+
+  function nameSuchen(vorname: string, nachname: string) {
+    const q = (vorname + ' ' + nachname).trim().toLowerCase()
+    if (q.length < 2) { setVorschlaege([]); setZeigeVorschlaege(false); return }
+    const treffer = LEHRPERSONEN_PDF.filter(lp =>
+      (lp.vorname + ' ' + lp.nachname).toLowerCase().includes(q) ||
+      lp.nachname.toLowerCase().includes(q) ||
+      lp.vorname.toLowerCase().includes(q)
+    ).slice(0, 8)
+    setVorschlaege(treffer)
+    setZeigeVorschlaege(treffer.length > 0)
+  }
+
+  function vorschlagWaehlen(lp: LpDaten) {
+    const berufMatch = lp.fachbereich === 'Berufskunde' && lp.beruf
+      ? berufe.find(b => b.bezeichnung === lp.beruf)
+      : null
+    setForm(f => ({
+      ...f,
+      vorname: lp.vorname,
+      nachname: lp.nachname,
+      fachbereich: lp.fachbereich,
+      beruf_id: berufMatch ? berufMatch.id : '',
+    }))
+    setZeigeVorschlaege(false)
   }
 
   async function absenden(e: React.FormEvent) {
@@ -66,17 +106,33 @@ export default function NeueLehrpersonSeite() {
       </div>
 
       <form onSubmit={absenden} className="card space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Vorname</label>
-            <input className="input" required value={form.vorname}
-              onChange={(e) => aendern('vorname', e.target.value)} />
+        <div ref={autocompleteRef} className="relative">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Vorname</label>
+              <input className="input" required value={form.vorname} autoComplete="off"
+                onChange={(e) => { aendern('vorname', e.target.value); nameSuchen(e.target.value, form.nachname) }}
+                onFocus={() => vorschlaege.length > 0 && setZeigeVorschlaege(true)} />
+            </div>
+            <div>
+              <label className="label">Nachname</label>
+              <input className="input" required value={form.nachname} autoComplete="off"
+                onChange={(e) => { aendern('nachname', e.target.value); nameSuchen(form.vorname, e.target.value) }}
+                onFocus={() => vorschlaege.length > 0 && setZeigeVorschlaege(true)} />
+            </div>
           </div>
-          <div>
-            <label className="label">Nachname</label>
-            <input className="input" required value={form.nachname}
-              onChange={(e) => aendern('nachname', e.target.value)} />
-          </div>
+          {zeigeVorschlaege && (
+            <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg overflow-hidden">
+              {vorschlaege.map((lp, i) => (
+                <button key={i} type="button"
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-50 last:border-0 flex justify-between items-center"
+                  onMouseDown={() => vorschlagWaehlen(lp)}>
+                  <span className="font-medium">{lp.vorname} {lp.nachname}</span>
+                  <span className="text-xs text-stone-400">{lp.fachbereich}{lp.beruf ? ` · ${lp.beruf.split('/')[0]}` : ''}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <label className="label">E-Mail</label>

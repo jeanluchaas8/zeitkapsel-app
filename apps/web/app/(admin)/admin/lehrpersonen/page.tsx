@@ -30,7 +30,10 @@ export default async function LehrpersonenSeite() {
           <Link href="/admin" className="text-stone-400 hover:text-stone-900 text-sm">← Admin</Link>
           <h1 className="text-2xl font-bold mt-1">Lehrpersonen</h1>
         </div>
-        <Link href="/admin/lehrpersonen/neu" className="btn-primary">+ Manuell erfassen</Link>
+        <div className="flex gap-2">
+          <Link href="/admin/lehrpersonen/import" className="btn-secondary">↑ Importieren</Link>
+          <Link href="/admin/lehrpersonen/neu" className="btn-primary">+ Manuell erfassen</Link>
+        </div>
       </div>
 
       {/* Ausstehende Registrierungen */}

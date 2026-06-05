@@ -1,10 +1,13 @@
 import { pool } from '@/lib/db'
 import Link from 'next/link'
 import { LehrpersonZuweisenFormular } from './LehrpersonZuweisenFormular'
+import LehrpersonenListe from './LehrpersonenListe'
 
-export default async function KlasseLehrpersonenSeite({ params }: { params: { klasseId: string } }) {
+export default async function KlasseLehrpersonenSeite({ params }: { params: Promise<{ klasseId: string }> }) {
+  const { klasseId } = await params
+
   const { rows: klasse } = await pool.query(
-    'SELECT id, bezeichnung, beruf FROM klasse WHERE id = $1', [params.klasseId],
+    'SELECT id, bezeichnung, beruf FROM klasse WHERE id = $1', [klasseId],
   )
   if (!klasse[0]) return <div>Klasse nicht gefunden</div>
 
@@ -14,10 +17,11 @@ export default async function KlasseLehrpersonenSeite({ params }: { params: { kl
     JOIN klasse_lehrperson kl ON kl.lehrperson_id = lp.id
     WHERE kl.klasse_id = $1
     ORDER BY lp.nachname
-  `, [params.klasseId])
+  `, [klasseId])
 
   const { rows: alle } = await pool.query(`
     SELECT id, vorname, nachname, fachbereich, email FROM lehrperson
+    WHERE status = 'aktiv'
     ORDER BY nachname
   `)
 
@@ -31,6 +35,7 @@ export default async function KlasseLehrpersonenSeite({ params }: { params: { kl
         <h1 className="text-2xl font-bold mt-1">
           {klasse[0].bezeichnung as string} — Lehrpersonen
         </h1>
+        <p className="text-sm text-stone-500 mt-1">{klasse[0].beruf as string}</p>
       </div>
 
       <div className="card space-y-3">
@@ -46,7 +51,7 @@ export default async function KlasseLehrpersonenSeite({ params }: { params: { kl
                   <p className="text-xs text-stone-400">{lp.fachbereich as string} · {lp.email as string}</p>
                 </div>
                 <LehrpersonZuweisenFormular
-                  klasseId={params.klasseId}
+                  klasseId={klasseId}
                   lehrpersonId={lp.id as string}
                   aktion="entfernen"
                 />
@@ -56,26 +61,7 @@ export default async function KlasseLehrpersonenSeite({ params }: { params: { kl
         )}
       </div>
 
-      {verfuegbar.length > 0 && (
-        <div className="card space-y-3">
-          <h2 className="font-semibold">Lehrperson hinzufügen</h2>
-          <div className="space-y-2">
-            {verfuegbar.map((lp) => (
-              <div key={lp.id as string} className="flex items-center justify-between rounded-lg border border-stone-200 px-4 py-2">
-                <div>
-                  <p className="text-sm font-medium">{lp.vorname as string} {lp.nachname as string}</p>
-                  <p className="text-xs text-stone-400">{lp.fachbereich as string} · {lp.email as string}</p>
-                </div>
-                <LehrpersonZuweisenFormular
-                  klasseId={params.klasseId}
-                  lehrpersonId={lp.id as string}
-                  aktion="hinzufuegen"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <LehrpersonenListe klasseId={klasseId} verfuegbar={verfuegbar as Parameters<typeof LehrpersonenListe>[0]['verfuegbar']} />
     </div>
   )
 }

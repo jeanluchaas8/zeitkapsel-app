@@ -4,11 +4,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { Rolle } from '@/lib/typen'
 
-async function lehrpersonOderAdminPruefen(): Promise<string | null> {
+async function lehrpersonOderAdminPruefen(): Promise<{ id: string; rolle: Rolle } | null> {
   const session = await auth()
   const rolle = (session?.user as { rolle?: Rolle } | undefined)?.rolle
   if (rolle !== 'admin' && rolle !== 'lehrperson') return null
-  return (session!.user as { id: string }).id
+  return { id: (session!.user as { id: string }).id, rolle }
 }
 
 const schema = z.object({
@@ -19,8 +19,9 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const lehrpersonId = await lehrpersonOderAdminPruefen()
-  if (!lehrpersonId) return NextResponse.json({ fehler: 'Keine Berechtigung' }, { status: 403 })
+  const benutzer = await lehrpersonOderAdminPruefen()
+  if (!benutzer) return NextResponse.json({ fehler: 'Keine Berechtigung' }, { status: 403 })
+  const { id: lehrpersonId, rolle } = benutzer
 
   const eingabe = schema.safeParse(await req.json())
   if (!eingabe.success) return NextResponse.json({ fehler: 'Ungültige Eingabe' }, { status: 400 })
@@ -39,11 +40,13 @@ export async function POST(req: NextRequest) {
   )
   const klasse = rows[0] as { id: string }
 
-  // Erstellende Lehrperson automatisch zur Klasse zuweisen
-  await pool.query(
-    `INSERT INTO klasse_lehrperson (klasse_id, lehrperson_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    [klasse.id, lehrpersonId],
-  )
+  // Nur Lehrpersonen (nicht Admins) automatisch zur Klasse zuweisen
+  if (rolle === 'lehrperson') {
+    await pool.query(
+      `INSERT INTO klasse_lehrperson (klasse_id, lehrperson_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [klasse.id, lehrpersonId],
+    )
+  }
 
   return NextResponse.json(klasse, { status: 201 })
 }
