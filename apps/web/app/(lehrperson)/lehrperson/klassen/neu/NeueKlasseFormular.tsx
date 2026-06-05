@@ -22,6 +22,7 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
   const [form, setForm] = useState({ bezeichnung: '', beruf: '', lehrstart: '', lehrabschluss: '', lehrdauer: '3' })
   const [laden, setLaden] = useState(false)
   const [fehler, setFehler] = useState('')
+  const [gewaehlteKlasseId, setGewaehlteKlasseId] = useState<string | null>(null)
 
   // Autocomplete-State
   const [bezeichnungFokus, setBezeichnungFokus] = useState(false)
@@ -54,6 +55,8 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
   }, [])
 
   function aendern(feld: string, wert: string) {
+    // Manuelle Änderung → nicht mehr an importierte Klasse gebunden
+    setGewaehlteKlasseId(null)
     const neuesForm = { ...form, [feld]: wert }
     if ((feld === 'lehrstart' || feld === 'lehrdauer') && neuesForm.lehrstart && neuesForm.lehrdauer) {
       const start = new Date(neuesForm.lehrstart)
@@ -71,39 +74,21 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
     setForm(neuesForm)
   }
 
-  // Importierte Klasse auswählen → Felder befüllen + direkt beitreten
-  async function klasseWaehlen(k: VerfuegbareKlasse) {
+  // Importierte Klasse auswählen → nur Felder befüllen
+  function klasseWaehlen(k: VerfuegbareKlasse) {
     setBezeichnungFokus(false)
     setBerufFokus(false)
-    setLaden(true)
-    setFehler('')
-    try {
-      const res = await fetch('/api/lehrperson/klassen/beitreten', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ klasse_id: k.id }),
-      })
-      if (!res.ok) {
-        const d = await res.json() as { fehler?: string }
-        throw new Error(d.fehler ?? 'Fehler')
-      }
-      router.push('/lehrperson/dashboard')
-      router.refresh()
-    } catch (err) {
-      setFehler(err instanceof Error ? err.message : 'Fehler')
-      // Felder trotzdem befüllen für manuelle Weiterbearbeitung
-      const start = new Date(k.lehrstart)
-      const end = new Date(k.lehrabschluss)
-      const lehrdauer = String(end.getFullYear() - start.getFullYear())
-      setForm({
-        bezeichnung: k.bezeichnung,
-        beruf: k.beruf,
-        lehrstart: k.lehrstart,
-        lehrabschluss: k.lehrabschluss,
-        lehrdauer,
-      })
-      setLaden(false)
-    }
+    const start = new Date(k.lehrstart)
+    const end = new Date(k.lehrabschluss)
+    const lehrdauer = String(end.getFullYear() - start.getFullYear())
+    setForm({
+      bezeichnung: k.bezeichnung,
+      beruf: k.beruf,
+      lehrstart: k.lehrstart,
+      lehrabschluss: k.lehrabschluss,
+      lehrdauer,
+    })
+    setGewaehlteKlasseId(k.id)
   }
 
   const vorschlaege = schuljahresenden
@@ -116,21 +101,36 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
     setLaden(true)
     setFehler('')
     try {
-      const res = await fetch('/api/admin/klassen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bezeichnung: form.bezeichnung,
-          beruf: form.beruf,
-          lehrstart: form.lehrstart,
-          lehrabschluss: form.lehrabschluss,
-        }),
-      })
-      if (!res.ok) {
-        const d = await res.json() as { fehler?: string }
-        throw new Error(d.fehler ?? 'Fehler')
+      // Importierte Klasse: nur Zuweisung, keine neue Klasse anlegen
+      if (gewaehlteKlasseId) {
+        const res = await fetch('/api/lehrperson/klassen/beitreten', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ klasse_id: gewaehlteKlasseId }),
+        })
+        if (!res.ok) {
+          const d = await res.json() as { fehler?: string }
+          throw new Error(d.fehler ?? 'Fehler')
+        }
+      } else {
+        // Manuelle Erfassung: neue Klasse erstellen
+        const res = await fetch('/api/admin/klassen', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bezeichnung: form.bezeichnung,
+            beruf: form.beruf,
+            lehrstart: form.lehrstart,
+            lehrabschluss: form.lehrabschluss,
+          }),
+        })
+        if (!res.ok) {
+          const d = await res.json() as { fehler?: string }
+          throw new Error(d.fehler ?? 'Fehler')
+        }
       }
       router.push('/lehrperson/dashboard')
+      router.refresh()
     } catch (err) {
       setFehler(err instanceof Error ? err.message : 'Fehler')
       setLaden(false)
@@ -238,12 +238,17 @@ export function NeueKlasseFormular({ schuljahresenden, verfuegbareKlassen }: Pro
         )}
       </div>
 
+      {gewaehlteKlasseId && (
+        <div className="rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-700">
+          Importierte Klasse ausgewählt – klicke auf „Klasse erfassen" um sie zu übernehmen.
+        </div>
+      )}
       {fehler && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{fehler}</div>}
 
       <div className="flex justify-between pt-2">
         <Link href="/lehrperson/dashboard" className="btn-secondary">Abbrechen</Link>
         <button type="submit" disabled={laden} className="btn-primary">
-          {laden ? 'Speichert…' : 'Klasse erstellen'}
+          {laden ? 'Speichert…' : 'Klasse erfassen'}
         </button>
       </div>
     </form>

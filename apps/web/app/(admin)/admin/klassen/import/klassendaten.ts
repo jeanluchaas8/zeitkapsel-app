@@ -9,9 +9,9 @@ export interface KlassenZeile {
 
 // Präfix → Beruf-Mapping
 const BERUF: Record<string, string> = {
-  'INFA':   'Informatiker/in EFZ',
-  'INFP':   'Informatiker/in EFZ',
-  'INFAWU': 'Informatiker/in EFZ',
+  'INFA':   'Informatiker/in Applikationsentwicklung EFZ',
+  'INFP':   'Informatiker/in Plattformentwicklung EFZ',
+  'INFAWU': 'Informatiker/in Applikationsentwicklung EFZ',
   'ICT':    'ICT-Fachmann/-frau EFZ',
   'EI':     'Elektroinstallateur/in EFZ',
   'ELO':    'Elektroniker/in EFZ',
