@@ -21,8 +21,8 @@ export default async function KlasseLehrpersonenSeite({ params }: { params: { kl
     ORDER BY nachname
   `)
 
-  const zugewiesenIds = new Set(zugewiesen.map((l) => l.id as string))
-  const verfuegbar = alle.filter((l) => !zugewiesenIds.has(l.id as string))
+  const zugewiesenIds = new Set(zugewiesen.map((l: { id: string }) => l.id))
+  const verfuegbar = alle.filter((l: { id: string }) => !zugewiesenIds.has(l.id))
 
   return (
     <div className="space-y-6">
