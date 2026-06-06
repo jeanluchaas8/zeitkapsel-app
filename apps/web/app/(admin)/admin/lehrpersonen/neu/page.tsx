@@ -10,6 +10,7 @@ const FACHBEREICHE = ['Berufskunde', 'Sport', 'Allgemeinbildung', 'Berufsmatura'
 interface Beruf { id: string; bezeichnung: string }
 
 export default function NeueLehrpersonSeite() {
+  const [nurVorerfassen, setNurVorerfassen] = useState(false)
   const [form, setForm] = useState({
     vorname: '', nachname: '', email: '', fachbereich: 'Berufskunde',
     beruf_id: '', passwort: '', ist_admin: false,
@@ -42,7 +43,6 @@ export default function NeueLehrpersonSeite() {
   function aendern(feld: string, wert: string | boolean) {
     setForm((f) => {
       const neu = { ...f, [feld]: wert }
-      // Beruf zurücksetzen wenn Fachbereich wechselt
       if (feld === 'fachbereich') neu.beruf_id = ''
       return neu
     })
@@ -79,13 +79,15 @@ export default function NeueLehrpersonSeite() {
     setLaden(true)
     setFehler('')
     try {
+      const body = nurVorerfassen
+        ? { vorname: form.vorname, nachname: form.nachname, email: form.email,
+            fachbereich: form.fachbereich, beruf_id: form.beruf_id, nurVorerfassen: true }
+        : { ...form, beruf_id: form.beruf_id || undefined, nurVorerfassen: false }
+
       const res = await fetch('/api/admin/lehrpersonen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          beruf_id: form.beruf_id || undefined,
-        }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
         const d = await res.json() as { fehler?: string }
@@ -102,10 +104,42 @@ export default function NeueLehrpersonSeite() {
     <div className="space-y-6 max-w-lg">
       <div>
         <Link href="/admin/lehrpersonen" className="text-stone-400 hover:text-stone-900 text-sm">← Lehrpersonen</Link>
-        <h1 className="text-2xl font-bold mt-1">Neue Lehrperson</h1>
+        <h1 className="text-2xl font-bold mt-1">
+          {nurVorerfassen ? 'Lehrperson vorerfassen' : 'Neue Lehrperson'}
+        </h1>
       </div>
 
+      {/* Modus-Toggle */}
+      <div className="flex rounded-xl overflow-hidden border border-stone-200 text-sm">
+        <button
+          type="button"
+          onClick={() => setNurVorerfassen(false)}
+          className={`flex-1 px-4 py-2.5 font-medium transition-colors ${
+            !nurVorerfassen ? 'bg-stone-900 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'
+          }`}
+        >
+          Sofort erfassen
+        </button>
+        <button
+          type="button"
+          onClick={() => setNurVorerfassen(true)}
+          className={`flex-1 px-4 py-2.5 font-medium transition-colors border-l border-stone-200 ${
+            nurVorerfassen ? 'bg-stone-900 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'
+          }`}
+        >
+          Nur vorerfassen
+        </button>
+      </div>
+
+      {nurVorerfassen && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <strong>Vorerfassung:</strong> Die Lehrperson wird noch nicht aktiviert.
+          Wenn sie sich später mit dieser E-Mail-Adresse registriert, sind Fachbereich und Beruf bereits vorausgefüllt.
+        </div>
+      )}
+
       <form onSubmit={absenden} className="card space-y-4">
+        {/* Name mit Autocomplete */}
         <div ref={autocompleteRef} className="relative">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -134,11 +168,13 @@ export default function NeueLehrpersonSeite() {
             </div>
           )}
         </div>
+
         <div>
           <label className="label">E-Mail</label>
           <input type="email" className="input" required value={form.email}
             onChange={(e) => aendern('email', e.target.value)} />
         </div>
+
         <div>
           <label className="label">Fachbereich</label>
           <select className="input" value={form.fachbereich}
@@ -149,7 +185,7 @@ export default function NeueLehrpersonSeite() {
 
         {form.fachbereich === 'Berufskunde' && (
           <div>
-            <label className="label">Beruf</label>
+            <label className="label">Beruf <span className="text-stone-400 font-normal">(optional)</span></label>
             {berufe.length === 0 ? (
               <p className="text-sm text-stone-400">Keine Berufe konfiguriert.{' '}
                 <Link href="/admin/berufe" className="underline">Jetzt erfassen</Link>
@@ -166,23 +202,32 @@ export default function NeueLehrpersonSeite() {
           </div>
         )}
 
-        <div>
-          <label className="label">Passwort (für Login)</label>
-          <input type="password" className="input" required minLength={8} value={form.passwort}
-            onChange={(e) => aendern('passwort', e.target.value)} />
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={form.ist_admin}
-            onChange={(e) => aendern('ist_admin', e.target.checked)} />
-          <span className="text-sm">Administrator-Rechte (kann Admin-Bereich nutzen)</span>
-        </label>
+        {/* Nur bei Sofort-Erfassung */}
+        {!nurVorerfassen && (
+          <>
+            <div>
+              <label className="label">Passwort (für Login)</label>
+              <input type="password" className="input" required minLength={8} value={form.passwort}
+                onChange={(e) => aendern('passwort', e.target.value)} />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={form.ist_admin}
+                onChange={(e) => aendern('ist_admin', e.target.checked)} />
+              <span className="text-sm">Administrator-Rechte</span>
+            </label>
+          </>
+        )}
 
         {fehler && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{fehler}</div>}
 
         <div className="flex justify-between pt-2">
           <Link href="/admin/lehrpersonen" className="btn-secondary">Abbrechen</Link>
           <button type="submit" disabled={laden} className="btn-primary">
-            {laden ? 'Speichert…' : 'Lehrperson erstellen'}
+            {laden
+              ? 'Speichert…'
+              : nurVorerfassen
+              ? 'Vorerfassen'
+              : 'Lehrperson erstellen'}
           </button>
         </div>
       </form>

@@ -19,6 +19,7 @@ export default function LehrpersonRegistrierenSeite() {
   const [erfolg, setErfolg] = useState(false)
   const [vorschlaege, setVorschlaege] = useState<LpDaten[]>([])
   const [zeigeVorschlaege, setZeigeVorschlaege] = useState(false)
+  const [vorerfasst, setVorerfasst] = useState(false)
   const autocompleteRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -41,6 +42,28 @@ export default function LehrpersonRegistrierenSeite() {
 
   function aendern(feld: string, wert: string) {
     setForm((f) => ({ ...f, [feld]: wert }))
+  }
+
+  async function emailPruefen(email: string) {
+    if (!email.includes('@')) return
+    setVorerfasst(false)
+    try {
+      const res = await fetch(`/api/registrieren/vorerfassung?email=${encodeURIComponent(email)}`)
+      const d = await res.json() as {
+        vorname: string; nachname: string; fachbereich: string
+        beruf: string; beruf_id: string
+      } | null
+      if (d) {
+        setForm(f => ({
+          ...f,
+          vorname: d.vorname,
+          nachname: d.nachname,
+          fachbereich: d.fachbereich,
+          beruf_id: d.beruf_id,
+        }))
+        setVorerfasst(true)
+      }
+    } catch { /* ignorieren */ }
   }
 
   function nameSuchen(vorname: string, nachname: string) {
@@ -174,8 +197,21 @@ export default function LehrpersonRegistrierenSeite() {
             <div>
               <label className="label">E-Mail-Adresse</label>
               <input type="email" className="input" required value={form.email}
-                onChange={(e) => aendern('email', e.target.value)} />
+                onChange={(e) => { aendern('email', e.target.value); setVorerfasst(false) }}
+                onBlur={(e) => emailPruefen(e.target.value)} />
             </div>
+
+            {vorerfasst && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 flex items-start gap-2">
+                <span className="text-lg leading-tight">✓</span>
+                <div>
+                  <p className="font-medium">Deine Daten wurden vorerfasst</p>
+                  <p className="text-blue-600 text-xs mt-0.5">
+                    Fachbereich und Beruf wurden bereits vom Administrator eingetragen. Du kannst sie bei Bedarf anpassen.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="label">Fachbereich</label>
