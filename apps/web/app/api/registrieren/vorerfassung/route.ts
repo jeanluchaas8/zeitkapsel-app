@@ -1,32 +1,21 @@
 import { pool } from '@/lib/db'
 import { NextResponse } from 'next/server'
 
+// Autocomplete: Suche nach Name in Vorerfassungsliste
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
-  const email = searchParams.get('email')?.trim().toLowerCase()
-  if (!email) return NextResponse.json(null)
+  const q = searchParams.get('q')?.trim() ?? ''
+  if (q.length < 2) return NextResponse.json([])
 
   const { rows } = await pool.query(
-    `SELECT vorname, nachname, fachbereich, b.bezeichnung AS beruf, lp.beruf_id
-     FROM lehrperson lp
-     LEFT JOIN berufe b ON b.id = lp.beruf_id
-     WHERE LOWER(lp.email) = $1 AND lp.status = 'vorerfasst'
-     LIMIT 1`,
-    [email]
+    `SELECT id, vorname, nachname, fachbereich, beruf
+     FROM lehrperson_vorerfassung
+     WHERE vorname ILIKE $1 OR nachname ILIKE $1
+        OR (vorname || ' ' || nachname) ILIKE $1
+     ORDER BY nachname, vorname
+     LIMIT 10`,
+    [`%${q}%`]
   )
 
-  if (!rows[0]) return NextResponse.json(null)
-
-  const lp = rows[0] as {
-    vorname: string; nachname: string; fachbereich: string
-    beruf: string | null; beruf_id: string | null
-  }
-
-  return NextResponse.json({
-    vorname: lp.vorname,
-    nachname: lp.nachname,
-    fachbereich: lp.fachbereich,
-    beruf: lp.beruf ?? '',
-    beruf_id: lp.beruf_id ?? '',
-  })
+  return NextResponse.json(rows)
 }

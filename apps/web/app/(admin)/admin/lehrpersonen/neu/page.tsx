@@ -3,14 +3,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { LEHRPERSONEN_PDF, type LpDaten } from '../import/lehrpersonendaten'
 
 const FACHBEREICHE = ['Berufskunde', 'Sport', 'Allgemeinbildung', 'Berufsmatura', 'Englisch', 'Mathematik']
 
 interface Beruf { id: string; bezeichnung: string }
+interface Vorerfassung { id: string; vorname: string; nachname: string; fachbereich: string; beruf: string }
 
 export default function NeueLehrpersonSeite() {
-  const [nurVorerfassen, setNurVorerfassen] = useState(false)
   const [form, setForm] = useState({
     vorname: '', nachname: '', email: '', fachbereich: 'Berufskunde',
     beruf_id: '', passwort: '', ist_admin: false,
@@ -18,151 +17,92 @@ export default function NeueLehrpersonSeite() {
   const [berufe, setBerufe] = useState<Beruf[]>([])
   const [laden, setLaden] = useState(false)
   const [fehler, setFehler] = useState('')
-  const [vorschlaege, setVorschlaege] = useState<LpDaten[]>([])
+  const [vorschlaege, setVorschlaege] = useState<Vorerfassung[]>([])
   const [zeigeVorschlaege, setZeigeVorschlaege] = useState(false)
   const autocompleteRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
   useEffect(() => {
-    fetch('/api/registrieren/berufe')
-      .then((r) => r.json())
-      .then((d: Beruf[]) => setBerufe(d))
-      .catch(() => null)
+    fetch('/api/registrieren/berufe').then(r => r.json()).then((d: Beruf[]) => setBerufe(d)).catch(() => null)
   }, [])
 
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node)) {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node))
         setZeigeVorschlaege(false)
-      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   function aendern(feld: string, wert: string | boolean) {
-    setForm((f) => {
+    setForm(f => {
       const neu = { ...f, [feld]: wert }
       if (feld === 'fachbereich') neu.beruf_id = ''
       return neu
     })
   }
 
-  function nameSuchen(vorname: string, nachname: string) {
-    const q = (vorname + ' ' + nachname).trim().toLowerCase()
+  async function nameSuchen(vorname: string, nachname: string) {
+    const q = (vorname + ' ' + nachname).trim()
     if (q.length < 2) { setVorschlaege([]); setZeigeVorschlaege(false); return }
-    const treffer = LEHRPERSONEN_PDF.filter(lp =>
-      (lp.vorname + ' ' + lp.nachname).toLowerCase().includes(q) ||
-      lp.nachname.toLowerCase().includes(q) ||
-      lp.vorname.toLowerCase().includes(q)
-    ).slice(0, 8)
-    setVorschlaege(treffer)
-    setZeigeVorschlaege(treffer.length > 0)
+    const d = await fetch(`/api/registrieren/vorerfassung?q=${encodeURIComponent(q)}`).then(r => r.json()) as Vorerfassung[]
+    setVorschlaege(d)
+    setZeigeVorschlaege(d.length > 0)
   }
 
-  function vorschlagWaehlen(lp: LpDaten) {
-    const berufMatch = lp.fachbereich === 'Berufskunde' && lp.beruf
-      ? berufe.find(b => b.bezeichnung === lp.beruf)
-      : null
-    setForm(f => ({
-      ...f,
-      vorname: lp.vorname,
-      nachname: lp.nachname,
-      fachbereich: lp.fachbereich,
-      beruf_id: berufMatch ? berufMatch.id : '',
-    }))
+  function vorschlagWaehlen(v: Vorerfassung) {
+    const berufMatch = v.fachbereich === 'Berufskunde' && v.beruf
+      ? berufe.find(b => b.bezeichnung === v.beruf) : null
+    setForm(f => ({ ...f, vorname: v.vorname, nachname: v.nachname, fachbereich: v.fachbereich, beruf_id: berufMatch?.id ?? '' }))
     setZeigeVorschlaege(false)
   }
 
   async function absenden(e: React.FormEvent) {
     e.preventDefault()
-    setLaden(true)
-    setFehler('')
+    setLaden(true); setFehler('')
     try {
-      const body = nurVorerfassen
-        ? { vorname: form.vorname, nachname: form.nachname, email: form.email,
-            fachbereich: form.fachbereich, beruf_id: form.beruf_id, nurVorerfassen: true }
-        : { ...form, beruf_id: form.beruf_id || undefined, nurVorerfassen: false }
-
       const res = await fetch('/api/admin/lehrpersonen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...form, beruf_id: form.beruf_id || undefined }),
       })
-      if (!res.ok) {
-        const d = await res.json() as { fehler?: string }
-        throw new Error(d.fehler ?? 'Fehler')
-      }
+      if (!res.ok) { const d = await res.json() as { fehler?: string }; throw new Error(d.fehler ?? 'Fehler') }
       router.push('/admin/lehrpersonen')
-    } catch (err) {
-      setFehler(err instanceof Error ? err.message : 'Fehler')
-      setLaden(false)
-    }
+    } catch (err) { setFehler(err instanceof Error ? err.message : 'Fehler'); setLaden(false) }
   }
 
   return (
     <div className="space-y-6 max-w-lg">
       <div>
         <Link href="/admin/lehrpersonen" className="text-stone-400 hover:text-stone-900 text-sm">← Lehrpersonen</Link>
-        <h1 className="text-2xl font-bold mt-1">
-          {nurVorerfassen ? 'Lehrperson vorerfassen' : 'Neue Lehrperson'}
-        </h1>
+        <h1 className="text-2xl font-bold mt-1">Neue Lehrperson</h1>
       </div>
-
-      {/* Modus-Toggle */}
-      <div className="flex rounded-xl overflow-hidden border border-stone-200 text-sm">
-        <button
-          type="button"
-          onClick={() => setNurVorerfassen(false)}
-          className={`flex-1 px-4 py-2.5 font-medium transition-colors ${
-            !nurVorerfassen ? 'bg-stone-900 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'
-          }`}
-        >
-          Sofort erfassen
-        </button>
-        <button
-          type="button"
-          onClick={() => setNurVorerfassen(true)}
-          className={`flex-1 px-4 py-2.5 font-medium transition-colors border-l border-stone-200 ${
-            nurVorerfassen ? 'bg-stone-900 text-white' : 'bg-white text-stone-500 hover:bg-stone-50'
-          }`}
-        >
-          Nur vorerfassen
-        </button>
-      </div>
-
-      {nurVorerfassen && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>Vorerfassung:</strong> Die Lehrperson wird noch nicht aktiviert.
-          Wenn sie sich später mit dieser E-Mail-Adresse registriert, sind Fachbereich und Beruf bereits vorausgefüllt.
-        </div>
-      )}
 
       <form onSubmit={absenden} className="card space-y-4">
-        {/* Name mit Autocomplete */}
         <div ref={autocompleteRef} className="relative">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Vorname</label>
               <input className="input" required value={form.vorname} autoComplete="off"
-                onChange={(e) => { aendern('vorname', e.target.value); nameSuchen(e.target.value, form.nachname) }}
+                onChange={e => { aendern('vorname', e.target.value); nameSuchen(e.target.value, form.nachname) }}
                 onFocus={() => vorschlaege.length > 0 && setZeigeVorschlaege(true)} />
             </div>
             <div>
               <label className="label">Nachname</label>
               <input className="input" required value={form.nachname} autoComplete="off"
-                onChange={(e) => { aendern('nachname', e.target.value); nameSuchen(form.vorname, e.target.value) }}
+                onChange={e => { aendern('nachname', e.target.value); nameSuchen(form.vorname, e.target.value) }}
                 onFocus={() => vorschlaege.length > 0 && setZeigeVorschlaege(true)} />
             </div>
           </div>
           {zeigeVorschlaege && (
             <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-stone-200 rounded-lg shadow-lg overflow-hidden">
-              {vorschlaege.map((lp, i) => (
-                <button key={i} type="button"
-                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-50 last:border-0 flex justify-between items-center"
-                  onMouseDown={() => vorschlagWaehlen(lp)}>
-                  <span className="font-medium">{lp.vorname} {lp.nachname}</span>
-                  <span className="text-xs text-stone-400">{lp.fachbereich}{lp.beruf ? ` · ${lp.beruf.split('/')[0]}` : ''}</span>
+              {vorschlaege.map(v => (
+                <button key={v.id} type="button"
+                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-stone-50 border-b border-stone-50 last:border-0 flex justify-between"
+                  onMouseDown={() => vorschlagWaehlen(v)}>
+                  <span className="font-medium">{v.vorname} {v.nachname}</span>
+                  <span className="text-xs text-stone-400">{v.fachbereich}{v.beruf ? ` · ${v.beruf.split('/')[0]}` : ''}</span>
                 </button>
               ))}
             </div>
@@ -171,64 +111,36 @@ export default function NeueLehrpersonSeite() {
 
         <div>
           <label className="label">E-Mail</label>
-          <input type="email" className="input" required value={form.email}
-            onChange={(e) => aendern('email', e.target.value)} />
+          <input type="email" className="input" required value={form.email} onChange={e => aendern('email', e.target.value)} />
         </div>
-
         <div>
           <label className="label">Fachbereich</label>
-          <select className="input" value={form.fachbereich}
-            onChange={(e) => aendern('fachbereich', e.target.value)}>
-            {FACHBEREICHE.map((f) => <option key={f}>{f}</option>)}
+          <select className="input" value={form.fachbereich} onChange={e => aendern('fachbereich', e.target.value)}>
+            {FACHBEREICHE.map(f => <option key={f}>{f}</option>)}
           </select>
         </div>
-
         {form.fachbereich === 'Berufskunde' && (
           <div>
             <label className="label">Beruf <span className="text-stone-400 font-normal">(optional)</span></label>
-            {berufe.length === 0 ? (
-              <p className="text-sm text-stone-400">Keine Berufe konfiguriert.{' '}
-                <Link href="/admin/berufe" className="underline">Jetzt erfassen</Link>
-              </p>
-            ) : (
-              <select className="input" value={form.beruf_id}
-                onChange={(e) => aendern('beruf_id', e.target.value)}>
-                <option value="">Beruf wählen…</option>
-                {berufe.map((b) => (
-                  <option key={b.id} value={b.id}>{b.bezeichnung}</option>
-                ))}
-              </select>
-            )}
+            <select className="input" value={form.beruf_id} onChange={e => aendern('beruf_id', e.target.value)}>
+              <option value="">Beruf wählen…</option>
+              {berufe.map(b => <option key={b.id} value={b.id}>{b.bezeichnung}</option>)}
+            </select>
           </div>
         )}
-
-        {/* Nur bei Sofort-Erfassung */}
-        {!nurVorerfassen && (
-          <>
-            <div>
-              <label className="label">Passwort (für Login)</label>
-              <input type="password" className="input" required minLength={8} value={form.passwort}
-                onChange={(e) => aendern('passwort', e.target.value)} />
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={form.ist_admin}
-                onChange={(e) => aendern('ist_admin', e.target.checked)} />
-              <span className="text-sm">Administrator-Rechte</span>
-            </label>
-          </>
-        )}
+        <div>
+          <label className="label">Passwort</label>
+          <input type="password" className="input" required minLength={8} value={form.passwort} onChange={e => aendern('passwort', e.target.value)} />
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={form.ist_admin} onChange={e => aendern('ist_admin', e.target.checked)} />
+          <span className="text-sm">Administrator-Rechte</span>
+        </label>
 
         {fehler && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{fehler}</div>}
-
         <div className="flex justify-between pt-2">
           <Link href="/admin/lehrpersonen" className="btn-secondary">Abbrechen</Link>
-          <button type="submit" disabled={laden} className="btn-primary">
-            {laden
-              ? 'Speichert…'
-              : nurVorerfassen
-              ? 'Vorerfassen'
-              : 'Lehrperson erstellen'}
-          </button>
+          <button type="submit" disabled={laden} className="btn-primary">{laden ? 'Speichert…' : 'Lehrperson erstellen'}</button>
         </div>
       </form>
     </div>

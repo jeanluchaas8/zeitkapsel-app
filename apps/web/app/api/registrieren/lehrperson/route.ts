@@ -35,29 +35,11 @@ export async function POST(req: Request) {
   if (!schulen[0]) return NextResponse.json({ fehler: 'Keine Schule konfiguriert' }, { status: 400 })
 
   try {
-    // Prüfen ob diese E-Mail bereits vorerfasst wurde
-    const { rows: vorerfasst } = await pool.query(
-      `SELECT id FROM lehrperson WHERE email = $1 AND status = 'vorerfasst'`,
-      [d.email]
+    await pool.query(
+      `INSERT INTO lehrperson (schule_id, vorname, nachname, email, fachbereich, beruf_id, passwort_hash, status)
+       VALUES ($1, $2, $3, $4, $5, $6, crypt($7, gen_salt('bf')), 'pending')`,
+      [schulen[0].id, d.vorname, d.nachname, d.email, d.fachbereich, d.beruf_id || null, d.passwort]
     )
-
-    if (vorerfasst[0]) {
-      // Vorerfassten Eintrag aktivieren
-      await pool.query(
-        `UPDATE lehrperson
-         SET vorname=$1, nachname=$2, fachbereich=$3, beruf_id=$4,
-             passwort_hash=crypt($5, gen_salt('bf')), status='pending'
-         WHERE id=$6`,
-        [d.vorname, d.nachname, d.fachbereich, d.beruf_id || null, d.passwort,
-         (vorerfasst[0] as { id: string }).id]
-      )
-    } else {
-      await pool.query(
-        `INSERT INTO lehrperson (schule_id, vorname, nachname, email, fachbereich, beruf_id, passwort_hash, status)
-         VALUES ($1, $2, $3, $4, $5, $6, crypt($7, gen_salt('bf')), 'pending')`,
-        [schulen[0].id, d.vorname, d.nachname, d.email, d.fachbereich, d.beruf_id || null, d.passwort]
-      )
-    }
   } catch {
     return NextResponse.json({ fehler: 'Diese E-Mail-Adresse ist bereits registriert.' }, { status: 409 })
   }

@@ -19,7 +19,6 @@ export default async function LehrpersonenSeite() {
     ORDER BY lp.status DESC, lp.nachname
   `)
 
-  const vorerfasste = rows.filter((r) => r.status === 'vorerfasst')
   const pending = rows.filter((r) => r.status === 'pending')
   const aktive  = rows.filter((r) => r.status === 'aktiv')
   const abgelehnte = rows.filter((r) => r.status === 'abgelehnt')
@@ -32,49 +31,11 @@ export default async function LehrpersonenSeite() {
           <h1 className="text-2xl font-bold mt-1">Lehrpersonen</h1>
         </div>
         <div className="flex gap-2">
+          <Link href="/admin/lehrpersonen/vorerfassung" className="btn-secondary">Vorerfassungsliste</Link>
           <Link href="/admin/lehrpersonen/import" className="btn-secondary">↑ Importieren</Link>
           <Link href="/admin/lehrpersonen/neu" className="btn-primary">+ Manuell erfassen</Link>
         </div>
       </div>
-
-      {/* Vorerfasste Lehrpersonen */}
-      {vorerfasste.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold">Vorerfasst</h2>
-            <span className="rounded-full bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5">
-              {vorerfasste.length}
-            </span>
-            <span className="text-xs text-stone-400">– warten auf Selbst-Registrierung</span>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-blue-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="border-b border-stone-200 bg-blue-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-stone-600">Name</th>
-                  <th className="px-4 py-3 text-left font-medium text-stone-600">E-Mail</th>
-                  <th className="px-4 py-3 text-left font-medium text-stone-600">Fachbereich</th>
-                  <th className="px-4 py-3 text-left font-medium text-stone-600">Beruf</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {vorerfasste.map((lp) => (
-                  <tr key={lp.id as string} className="border-b border-stone-100 last:border-0">
-                    <td className="px-4 py-3 font-medium text-stone-500">{lp.vorname as string} {lp.nachname as string}</td>
-                    <td className="px-4 py-3 text-stone-400">{lp.email as string}</td>
-                    <td className="px-4 py-3 text-stone-400">{lp.fachbereich as string}</td>
-                    <td className="px-4 py-3 text-stone-400">{(lp.beruf_bezeichnung as string) ?? '—'}</td>
-                    <td className="px-4 py-3 text-right">
-                      <LoeschenButton id={lp.id as string} name={`${lp.vorname as string} ${lp.nachname as string}`} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Ausstehende Registrierungen */}
       {pending.length > 0 && (
